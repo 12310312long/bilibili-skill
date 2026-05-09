@@ -79,17 +79,17 @@ python "bilibili_api.py" send-msg <对方UID> <消息内容>
 示例：
 
 ```bash
-python "bilibili_api.py" send-msg <对方UID> 你@你大坝
+python "bilibili_api.py" send-msg <对方UID> <消息内容>
 ```
 
 ```python
 from bilibili_api import send_private_message
 
 # 发送私信（普通）
-send_private_message(receiver_id=<对方UID>, message="你好")
+send_private_message(receiver_id=<对方UID>, message="<消息内容>")
 
 # from_firework=1 可对未聊过的新联系人发送（突破 1 条限制）
-send_private_message(receiver_id=<对方UID>, message="你好", from_firework=1)
+send_private_message(receiver_id=<对方UID>, message="<消息内容>", from_firework=1)
 ```
 
 ### 用户信息
@@ -136,8 +136,8 @@ user = user_info(uid="<用户UID>")
 videos = user_videos(uid="<用户UID>")
 
 # 私信
-send_private_message(receiver_id=<对方UID>, message="你好")
-send_private_message(receiver_id=<对方UID>, message="你好", from_firework=1)
+send_private_message(receiver_id=<对方UID>, message="<消息内容>")
+send_private_message(receiver_id=<对方UID>, message="<消息内容>", from_firework=1)
 
 # 导出 cookie 供 yt-dlp 使用
 export_cookies_for_ytdlp("/tmp/bilibili_cookies.txt")

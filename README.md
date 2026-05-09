@@ -37,7 +37,7 @@ python bilibili_api.py like-fav <视频BVID>
 python bilibili_api.py comments <视频BVID>
 
 # 发送私信
-python bilibili_api.py send-msg <对方UID> "你好"
+python bilibili_api.py send-msg <对方UID> "<消息内容>"
 
 # 用户信息
 python bilibili_api.py user <用户UID>
@@ -66,8 +66,8 @@ favorite_video(bvid="<视频BVID>")
 post_comment(bvid="<视频BVID>", message="评论内容")
 
 # 私信
-send_private_message(receiver_id=<对方UID>, message="你好")
-send_private_message(receiver_id=<对方UID>, message="你好", from_firework=1)
+send_private_message(receiver_id=<对方UID>, message="<消息内容>")
+send_private_message(receiver_id=<对方UID>, message="<消息内容>", from_firework=1)
 
 # 下载
 download_video("<视频BVID>", output_dir="D:/videos")
