@@ -46,6 +46,9 @@ python bilibili_api.py like-fav <视频BVID>
 # 查看评论
 python bilibili_api.py comments <视频BVID>
 
+# 发表评论
+python bilibili_api.py post-comment <视频BVID> "<评论内容>"
+
 # 发送私信
 python bilibili_api.py send-msg <对方UID> "<消息内容>"
 

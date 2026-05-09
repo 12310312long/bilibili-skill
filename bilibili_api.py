@@ -159,6 +159,7 @@ def _ensure_cdp_browser():
 
     subprocess.Popen(
         [browser_exe, "--remote-debugging-port=9222",
+         "--remote-allow-origins=*",
          "--new-window", "https://www.bilibili.com"],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
     )
@@ -679,7 +680,8 @@ if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("Usage: python bilibili_api.py <command> [args]")
         print("Commands: info <bvid>, like <bvid>, fav <bvid>, like-fav <bvid>,")
-        print("  comments <bvid>, download <bvid>, user <uid>, user-videos <uid>")
+        print("  comments <bvid>, post-comment <bvid> <message>, download <bvid>,")
+        print("  user <uid>, user-videos <uid>")
         print("  send-msg <uid> <message>, load-cookies (from CDP), export-cookies [path]")
         sys.exit(1)
 
@@ -711,6 +713,14 @@ if __name__ == "__main__":
         print(f"Sending to {uid}: {msg}")
         send_private_message(uid, msg)
         print("Sent!")
+    elif cmd == "post-comment":
+        if len(sys.argv) < 4:
+            print("Usage: python bilibili_api.py post-comment <bvid> <message>")
+            sys.exit(1)
+        bvid = sys.argv[2]
+        msg = sys.argv[3]
+        post_comment(bvid=bvid, message=msg)
+        print("Comment posted!")
     elif cmd == "load-cookies":
         load_cookies_from_cdp()
     elif cmd == "export-cookies":
