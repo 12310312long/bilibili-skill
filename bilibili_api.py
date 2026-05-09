@@ -674,6 +674,47 @@ def user_videos(uid, page=1, page_size=30):
     return videos
 
 
+def followings(uid=None, page=1, page_size=50):
+    """Get list of users the current user follows."""
+    s = _get_session()
+    if not uid:
+        for c in s.cookies:
+            if c.name == "DedeUserID":
+                uid = c.value
+                break
+        if not uid:
+            raise Exception("Cannot determine your UID. Are you logged in?")
+    r = s.get("https://api.bilibili.com/x/relation/followings", params={
+        "vmid": uid, "pn": page, "ps": page_size,
+    })
+    data = r.json()
+    if data["code"] != 0:
+        raise Exception(f"API error: {data['message']}")
+    users = []
+    for u in data["data"]["list"]:
+        users.append({
+            "uid": u["mid"],
+            "uname": u["uname"],
+            "sign": u.get("sign", ""),
+        })
+    return users, data["data"].get("total", 0)
+
+
+def unfollow(uid):
+    """Unfollow a user by UID."""
+    s = _get_session()
+    csrf = _csrf()
+    if not csrf:
+        raise Exception("No CSRF token. Load cookies first.")
+    r = s.post("https://api.bilibili.com/x/relation/modify", data={
+        "fid": uid, "act": 2, "csrf": csrf,
+    })
+    data = r.json()
+    if data["code"] != 0:
+        raise Exception(f"Unfollow failed: {data['message']}")
+    return True
+
+
 if __name__ == "__main__":
     import sys
     sys.stdout.reconfigure(encoding='utf-8', errors='replace')
