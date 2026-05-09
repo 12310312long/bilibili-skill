@@ -19,24 +19,14 @@
 
 ## Cookie 登录
 
-**自动提取（推荐）**
-
-`load_cookies_from_cdp()` 会自动启动 Edge 浏览器，通过 Chrome DevTools Protocol 直连提取 Cookie：
+`load_cookies_from_cdp()` 会自动启动 Chrome/Edge 浏览器，通过 Chrome DevTools Protocol 直连提取 Cookie：
 
 ```python
 from bilibili_api import load_cookies_from_cdp
 load_cookies_from_cdp()
 ```
 
-无需任何代理或中间服务——底层通过 WebSocket 直接调用 CDP 的 `Network.getCookies`。
-
-**手动方式**
-
-也可以手动从浏览器导出 Cookie 文件加载：
-   ```python
-   from bilibili_api import load_cookies_from_file
-   load_cookies_from_file("bilibili_cookies.txt")
-   ```
+无需任何代理或中间服务——底层通过 WebSocket 直接调用 CDP 的 `Network.getCookies`，HttpOnly 的 `SESSDATA` 也能完整获取。
 
 ## 快速开始
 

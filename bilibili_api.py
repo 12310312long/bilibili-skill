@@ -98,10 +98,10 @@ def export_cookies_for_ytdlp(path=None):
 
 
 def _ensure_cdp_browser():
-    """Ensure Edge/Chrome is running with CDP on port 9222.
+    """Launch a browser with CDP on port 9222 if not already running.
 
-    Launches Edge with --remote-debugging-port=9222 using default user
-    profile (where B站 login cookies live). Safe to call repeatedly.
+    Supports Edge and Chrome on Windows/macOS/Linux.
+    Uses the default user profile so B站 login cookies are available.
     """
     # Check if already accessible
     try:
@@ -114,38 +114,55 @@ def _ensure_cdp_browser():
     except Exception:
         pass
 
-    local_appdata = os.environ.get("LOCALAPPDATA", "")
-    user_data = os.path.join(local_appdata, "Microsoft", "Edge", "User Data") if local_appdata else ""
-    port_file = os.path.join(user_data, "DevToolsActivePort") if user_data else ""
+    import platform
+    system = platform.system()
 
-    # Kill existing Edge processes so we can restart with CDP flag
-    subprocess.run(["powershell", "-Command",
-        "Get-Process -Name '*edge*' -ErrorAction SilentlyContinue | Stop-Process -Force"],
-        capture_output=True, timeout=15)
-    time.sleep(5)
+    # Build browser search paths per platform
+    browser_candidates = []
+    if system == "Windows":
+        pf86 = os.environ.get("PROGRAMFILES(X86)", "C:\\Program Files (x86)")
+        pf64 = os.environ.get("PROGRAMFILES", "C:\\Program Files")
+        la = os.environ.get("LOCALAPPDATA", "")
+        browser_candidates = [
+            os.path.join(pf86, "Microsoft", "Edge", "Application", "msedge.exe"),
+            os.path.join(pf64, "Microsoft", "Edge", "Application", "msedge.exe"),
+            os.path.join(pf64, "Google", "Chrome", "Application", "chrome.exe"),
+            os.path.join(la, "Google", "Chrome", "Application", "chrome.exe") if la else "",
+        ]
+    elif system == "Darwin":
+        browser_candidates = [
+            "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        ]
+    else:  # Linux
+        browser_candidates = [
+            "microsoft-edge-stable", "google-chrome",
+            "chromium-browser", "chromium",
+        ]
 
-    if port_file:
-        try:
-            os.remove(port_file)
-        except OSError:
-            pass
+    browser_exe = next((p for p in browser_candidates if p and os.path.exists(p)), None)
+    if not browser_exe and system not in ("Windows",):
+        for p in browser_candidates:
+            try:
+                subprocess.run(["which", p], capture_output=True, timeout=3)
+                browser_exe = p
+                break
+            except Exception:
+                pass
 
-    # Find Edge executable
-    edge_paths = [
-        os.path.join(os.environ.get("PROGRAMFILES(X86)", ""), "Microsoft", "Edge", "Application", "msedge.exe"),
-        os.path.join(os.environ.get("PROGRAMFILES", ""), "Microsoft", "Edge", "Application", "msedge.exe"),
-    ]
-    edge_exe = next((p for p in edge_paths if os.path.exists(p)), None)
-    if not edge_exe:
-        raise Exception("Edge browser not found")
+    if not browser_exe:
+        raise Exception(
+            "No supported browser found. Install Chrome or Edge, "
+            "or launch one manually with: --remote-debugging-port=9222 "
+            "and open https://www.bilibili.com"
+        )
 
-    # Launch Edge with CDP port
     subprocess.Popen(
-        [edge_exe, "--remote-debugging-port=9222", "https://www.bilibili.com"],
+        [browser_exe, "--remote-debugging-port=9222",
+         "--new-window", "https://www.bilibili.com"],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
     )
 
-    # Wait for it to become ready
     for _ in range(15):
         time.sleep(2)
         try:
@@ -158,7 +175,7 @@ def _ensure_cdp_browser():
         except Exception:
             pass
 
-    raise Exception("Edge failed to start with CDP port 9222")
+    raise Exception("Browser failed to start with CDP port 9222")
 
 
 def _cdp_ws_url():
@@ -447,51 +464,48 @@ def get_comments(bvid=None, aid=None, page=1, sort=1):
 
 def download_video(bvid, output_dir=".", output_name=None):
     """Download a B站 video. Uses __playinfo__ via CDP for charged videos.
-    For regular videos, falls back to yt-dlp.
 
-    Requires CDP proxy (node cdp-proxy.mjs) and at least one bilibili tab open.
-
+    Requires browser with CDP on port 9222 and the video page loaded.
     Returns: path to downloaded file.
     """
-    import subprocess, urllib.request
-
     info = video_info(bvid=bvid)
     title = info["title"]
     safe_title = re.sub(r'[\\/:*?"<>|]', '', title)
-
     if output_name is None:
         output_name = safe_title
 
-    # Try CDP __playinfo__ approach (works for charged videos too)
-    result = subprocess.run(
-        ["curl", "-s", "http://localhost:3456/targets"],
-        capture_output=True, text=True, encoding='utf-8', errors='replace'
-    )
-    targets = json.loads(result.stdout) if result.stdout.strip() else []
+    _ensure_cdp_browser()
+    time.sleep(2)
+
+    # Ensure a bilibili tab is open at the video page
+    try:
+        resp = urllib.request.urlopen("http://localhost:9222/json", timeout=5)
+        targets = json.loads(resp.read().decode())
+    except Exception as e:
+        raise Exception(f"Cannot connect to CDP: {e}")
 
     bili_target = None
     for t in targets:
-        if "bilibili.com" in t.get("url", ""):
-            bili_target = t.get("targetId") or t.get("id")
+        if bvid in t.get("url", ""):
+            bili_target = t["id"]
             break
-
     if not bili_target:
-        print("No bilibili tab. Opening one...")
-        resp = subprocess.run(
-            ["curl", "-s", f"http://localhost:3456/new?url=https://www.bilibili.com/video/{bvid}"],
-            capture_output=True, text=True, encoding='utf-8', errors='replace'
-        )
-        try:
-            new_tab = json.loads(resp.stdout)
-            bili_target = new_tab.get("targetId") or new_tab.get("id")
-            time.sleep(5)  # Wait for page load
-        except Exception:
-            raise Exception("Failed to open bilibili tab. Is CDP proxy running?")
+        for t in targets:
+            if "bilibili.com" in t.get("url", ""):
+                bili_target = t["id"]
+                break
+    if not bili_target:
+        # Open video page
+        req = urllib.request.Request(
+            f"http://localhost:9222/json/new?url=https://www.bilibili.com/video/{bvid}")
+        resp = urllib.request.urlopen(req, timeout=10)
+        new_tab = json.loads(resp.read().decode())
+        bili_target = new_tab["id"]
+        time.sleep(5)
 
-    # Extract playinfo
+    # Extract playinfo via CDP Runtime.evaluate
     print(f"Extracting stream URLs for {bvid}...")
-    js_code = """
-    (function() {
+    js_code = """(() => {
         try {
             var p = window.__playinfo__;
             if (!p) return 'NO_PLAYINFO';
@@ -505,25 +519,20 @@ def download_video(bvid, output_dir=".", output_name=None):
                 duration: p.data.dash.duration
             });
         } catch(e) { return 'ERROR: ' + e.message; }
-    })()
-    """
+    })()"""
 
-    resp = subprocess.run(
-        ["curl", "-s", "-X", "POST",
-         f"http://localhost:3456/eval?target={bili_target}",
-         "-d", js_code],
-        capture_output=True, text=True, encoding='utf-8', errors='replace'
-    )
+    result = _cdp_call("Runtime.evaluate", {
+        "expression": js_code,
+        "awaitPromise": True,
+    })
+    raw = result.get("result", {}).get("value", "")
+    if not raw or raw == "NO_PLAYINFO":
+        raise Exception(f"__playinfo__ not found. Is the video page loaded?\nNavigating to video page and retrying...")
 
-    try:
-        playinfo = json.loads(resp.stdout.strip())
-    except json.JSONDecodeError:
-        raise Exception(f"Failed to get playinfo. Is video page loaded?\nResponse: {resp.stdout[:200]}")
+    if raw.startswith("ERROR"):
+        raise Exception(f"JS error: {raw}")
 
-    if "video" not in playinfo:
-        raise Exception(f"No video streams in playinfo: {playinfo}")
-
-    # Download best video + audio
+    playinfo = json.loads(raw)
     best_video = playinfo["video"][0]["url"]
     best_audio = playinfo["audio"][0]["url"]
 
