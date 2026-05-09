@@ -1,8 +1,9 @@
 """
 B站 API helper. Uses cookies from CDP browser or Netscape cookie file.
-Handles: video info, like, favorite, comment, download.
+Handles: video info, like, favorite, comment, download, DM.
 """
 import json, re, os, time, urllib.request, http.cookiejar, hashlib, functools
+import subprocess
 from urllib.parse import urlencode
 from http.cookiejar import MozillaCookieJar
 
@@ -96,242 +97,130 @@ def export_cookies_for_ytdlp(path=None):
     return path
 
 
-def ensure_cdp_browser():
-    """Ensure a CDP-enabled browser with the user's real profile is running.
+def _ensure_cdp_browser():
+    """Ensure Edge/Chrome is running with CDP on port 9222.
 
-    Launches Edge with --remote-debugging-port=9222 using the default user
-    profile (where B站 login cookies live), then starts the CDP proxy.
-    Safe to call even if the proxy is already running.
+    Launches Edge with --remote-debugging-port=9222 using default user
+    profile (where B站 login cookies live). Safe to call repeatedly.
     """
-    import subprocess, os, time, json
-
-    # Check if CDP proxy is already running AND connected to a browser
+    # Check if already accessible
     try:
         r = subprocess.run(
-            ["curl", "-s", "--connect-timeout", "2", "http://localhost:3456/health"],
-            capture_output=True, text=True, encoding='utf-8', errors='replace',
-            timeout=5
+            ["curl", "-s", "--connect-timeout", "2", "http://localhost:9222/json/version"],
+            capture_output=True, text=True, timeout=5
         )
-        if r.returncode == 0:
-            try:
-                health = json.loads(r.stdout)
-                if health.get("connected") and health.get("chromePort"):
-                    return  # proxy running and connected
-            except json.JSONDecodeError:
-                pass
+        if r.returncode == 0 and "Browser" in r.stdout:
+            return
     except Exception:
         pass
 
     local_appdata = os.environ.get("LOCALAPPDATA", "")
-    user_data = os.path.join(local_appdata, "Microsoft", "Edge", "User Data")
-    port_file = os.path.join(user_data, "DevToolsActivePort")
+    user_data = os.path.join(local_appdata, "Microsoft", "Edge", "User Data") if local_appdata else ""
+    port_file = os.path.join(user_data, "DevToolsActivePort") if user_data else ""
 
-    # Check if CDP browser is already accessible on port 9222
-    cdp_ready = False
-    try:
-        r = subprocess.run(
-            ["curl", "-s", "--connect-timeout", "2", "http://localhost:9222/json/version"],
-            capture_output=True, text=True, encoding='utf-8', errors='replace',
-            timeout=5
-        )
-        if r.returncode == 0 and "Browser" in r.stdout:
-            cdp_ready = True
-    except Exception:
-        pass
+    # Kill existing Edge processes so we can restart with CDP flag
+    subprocess.run(["powershell", "-Command",
+        "Get-Process -Name '*edge*' -ErrorAction SilentlyContinue | Stop-Process -Force"],
+        capture_output=True, timeout=15)
+    time.sleep(5)
 
-    if not cdp_ready:
-        # Kill existing Edge processes (PowerShell is more reliable than taskkill)
-        subprocess.run(["powershell", "-Command",
-            "Get-Process -Name '*edge*' -ErrorAction SilentlyContinue | Stop-Process -Force"],
-            capture_output=True, timeout=15)
-        time.sleep(5)
-
-        # Remove old DevToolsActivePort to avoid stale reads
+    if port_file:
         try:
             os.remove(port_file)
         except OSError:
             pass
 
-        # Find Edge executable
-        edge_paths = [
-            os.path.join(os.environ.get("PROGRAMFILES(X86)", ""), "Microsoft", "Edge", "Application", "msedge.exe"),
-            os.path.join(os.environ.get("PROGRAMFILES", ""), "Microsoft", "Edge", "Application", "msedge.exe"),
-        ]
-        edge_exe = None
-        for p in edge_paths:
-            if os.path.exists(p):
-                edge_exe = p
-                break
-        if not edge_exe:
-            raise Exception("Edge browser not found")
+    # Find Edge executable
+    edge_paths = [
+        os.path.join(os.environ.get("PROGRAMFILES(X86)", ""), "Microsoft", "Edge", "Application", "msedge.exe"),
+        os.path.join(os.environ.get("PROGRAMFILES", ""), "Microsoft", "Edge", "Application", "msedge.exe"),
+    ]
+    edge_exe = next((p for p in edge_paths if os.path.exists(p)), None)
+    if not edge_exe:
+        raise Exception("Edge browser not found")
 
-        # Launch Edge with default profile + CDP
-        subprocess.Popen(
-            [edge_exe, "--remote-debugging-port=9222", "https://www.bilibili.com"],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-        )
-
-        # Wait for Edge CDP to become ready
-        for _ in range(10):
-            time.sleep(2)
-            try:
-                r = subprocess.run(
-                    ["curl", "-s", "--connect-timeout", "2", "http://localhost:9222/json/version"],
-                    capture_output=True, text=True, encoding='utf-8', errors='replace',
-                    timeout=5
-                )
-                if r.returncode == 0 and "Browser" in r.stdout:
-                    cdp_ready = True
-                    break
-            except Exception:
-                pass
-
-        if not cdp_ready:
-            raise Exception("Edge failed to start with CDP port 9222")
-
-    # Ensure DevToolsActivePort file exists for CDP proxy discovery
-    if not os.path.exists(port_file):
-        try:
-            r = subprocess.run(
-                ["curl", "-s", "http://localhost:9222/json/version"],
-                capture_output=True, text=True, encoding='utf-8', errors='replace',
-                timeout=5
-            )
-            ver = json.loads(r.stdout)
-            ws_url = ver.get("webSocketDebuggerUrl", "")
-            # Extract UUID path from ws://127.0.0.1:9222/devtools/browser/<uuid>
-            import re
-            m = re.search(r'/devtools/browser/([\w-]+)', ws_url)
-            if m:
-                os.makedirs(user_data, exist_ok=True)
-                with open(port_file, 'w') as f:
-                    f.write(f"9222\n/devtools/browser/{m.group(1)}")
-        except Exception:
-            pass  # CDP proxy can still scan port 9222 without this file
-
-    # Kill any stale CDP proxy (not connected) and restart
-    try:
-        r = subprocess.run(
-            ["curl", "-s", "--connect-timeout", "2", "http://localhost:3456/health"],
-            capture_output=True, text=True, encoding='utf-8', errors='replace',
-            timeout=5
-        )
-        if r.returncode == 0:
-            health = json.loads(r.stdout)
-            if not health.get("connected"):
-                # Proxy is running but not connected — kill it
-                subprocess.run(["powershell", "-Command",
-                    "Get-NetTCPConnection -LocalPort 3456 -ErrorAction SilentlyContinue | "
-                    "ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }"],
-                    capture_output=True, timeout=10)
-                time.sleep(2)
-    except Exception:
-        pass
-
-    # Check again if proxy is healthy
-    try:
-        r = subprocess.run(
-            ["curl", "-s", "--connect-timeout", "2", "http://localhost:3456/health"],
-            capture_output=True, text=True, encoding='utf-8', errors='replace',
-            timeout=5
-        )
-        if r.returncode == 0:
-            health = json.loads(r.stdout)
-            if health.get("connected"):
-                return  # healthy proxy already running
-    except Exception:
-        pass
-
-    # Start CDP proxy
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    proxy_path = os.path.normpath(os.path.join(
-        script_dir, "..", "web-access", "scripts", "cdp-proxy.mjs"))
-    if not os.path.exists(proxy_path):
-        raise Exception(f"CDP proxy not found at {proxy_path}")
-
+    # Launch Edge with CDP port
     subprocess.Popen(
-        ["node", proxy_path],
+        [edge_exe, "--remote-debugging-port=9222", "https://www.bilibili.com"],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
     )
-    time.sleep(4)
 
-    # Verify proxy is responding and connected
-    try:
-        r = subprocess.run(
-            ["curl", "-s", "--connect-timeout", "3", "http://localhost:3456/health"],
-            capture_output=True, text=True, encoding='utf-8', errors='replace',
-            timeout=10
-        )
-        if r.returncode != 0:
-            raise Exception("CDP proxy failed to start")
-        health = json.loads(r.stdout)
-        if not health.get("connected"):
-            # Give it another moment to connect, then check again
-            time.sleep(3)
+    # Wait for it to become ready
+    for _ in range(15):
+        time.sleep(2)
+        try:
             r = subprocess.run(
-                ["curl", "-s", "--connect-timeout", "3", "http://localhost:3456/health"],
-                capture_output=True, text=True, encoding='utf-8', errors='replace',
-                timeout=10
+                ["curl", "-s", "--connect-timeout", "2", "http://localhost:9222/json/version"],
+                capture_output=True, text=True, timeout=5
             )
-            health = json.loads(r.stdout)
-            if not health.get("connected"):
-                raise Exception("CDP proxy started but failed to connect to browser")
-    except subprocess.TimeoutExpired:
-        raise Exception("CDP proxy startup timed out")
+            if r.returncode == 0 and "Browser" in r.stdout:
+                return
+        except Exception:
+            pass
+
+    raise Exception("Edge failed to start with CDP port 9222")
+
+
+def _cdp_ws_url():
+    """Get the WebSocket debug URL for a bilibili tab (opens one if needed)."""
+    resp = urllib.request.urlopen("http://localhost:9222/json", timeout=10)
+    targets = json.loads(resp.read().decode())
+
+    for t in targets:
+        if "bilibili.com" in t.get("url", ""):
+            return t["webSocketDebuggerUrl"]
+
+    # No bilibili tab — open one
+    req = urllib.request.Request(
+        "http://localhost:9222/json/new?https://www.bilibili.com")
+    resp = urllib.request.urlopen(req, timeout=10)
+    target = json.loads(resp.read().decode())
+    return target["webSocketDebuggerUrl"]
+
+
+def _cdp_call(method, params=None):
+    """Send a CDP command via WebSocket and return the result."""
+    import websocket
+    ws_url = _cdp_ws_url()
+    ws = websocket.create_connection(ws_url, timeout=15)
+    msg_id = int(time.time() * 1000) % 1000000
+    cmd = json.dumps({"id": msg_id, "method": method, "params": params or {}})
+    ws.send(cmd)
+    try:
+        while True:
+            resp = json.loads(ws.recv())
+            if resp.get("id") == msg_id:
+                return resp.get("result")
+    finally:
+        ws.close()
 
 
 def load_cookies_from_cdp():
-    """Extract B站 cookies from CDP browser and save to file.
-    Automatically ensures CDP browser and proxy are running.
+    """Extract B站 cookies from Edge/Chrome via CDP and save to file.
+
+    Automatically launches the browser with CDP enabled (port 9222).
+    No external proxy or Node.js required — uses direct WebSocket CDP.
     """
-    import subprocess
+    _ensure_cdp_browser()
 
-    ensure_cdp_browser()
+    # Give the page a moment to load cookies
+    time.sleep(2)
 
-    # Find a bilibili tab
-    result = subprocess.run(
-        ["curl", "-s", "http://localhost:3456/targets"],
-        capture_output=True, text=True, encoding='utf-8', errors='replace'
-    )
-    try:
-        targets = json.loads(result.stdout)
-    except json.JSONDecodeError:
-        print("No CDP targets found. Is proxy running?")
-        return None
-
-    bili_target = None
-    for t in targets:
-        if "bilibili.com" in t.get("url", ""):
-            bili_target = t.get("targetId") or t.get("id")
-            break
-
-    if not bili_target:
-        print("No bilibili tab found. Open one in your browser first.")
-        return None
-
-    # Get ALL cookies via CDP Network.getCookies (includes HttpOnly like SESSDATA)
-    resp = subprocess.run(
-        ["curl", "-s", f"http://localhost:3456/cookies?target={bili_target}"],
-        capture_output=True, text=True, encoding='utf-8', errors='replace'
-    )
-    try:
-        cookies = json.loads(resp.stdout)
-    except json.JSONDecodeError:
-        print("Failed to parse cookies from CDP")
-        return None
+    result = _cdp_call("Network.getCookies",
+                        {"urls": ["https://www.bilibili.com"]})
+    cookies = result.get("cookies", [])
 
     if not cookies:
         print("No cookies found in bilibili tab. Are you logged in?")
         return None
 
-    # Build Netscape cookie jar from CDP cookie objects
+    # Build Mozilla cookie jar
     cj = MozillaCookieJar()
-    from http.cookiejar import Cookie
     for c in cookies:
         expires = c.get("expires", 0)
         if expires and expires < 0:
-            expires = None  # session cookie
-        cookie = Cookie(
+            expires = None
+        cookie = http.cookiejar.Cookie(
             version=0, name=c.get("name", ""), value=c.get("value", ""),
             port=None, port_specified=False,
             domain=c.get("domain", ".bilibili.com"), domain_specified=True,
@@ -344,16 +233,19 @@ def load_cookies_from_cdp():
         cj.set_cookie(cookie)
 
     cj.save(COOKIE_FILE, ignore_discard=True, ignore_expires=True)
-    # Also reload into session
+    # Reload into session
     load_cookies_from_file(COOKIE_FILE)
 
-    # Verify key auth cookie is present
+    # Verify login
     s = _get_session()
     has_dedeuserid = any(c.name == "DedeUserID" for c in s.cookies)
     if not has_dedeuserid:
         print("WARNING: DedeUserID cookie not found. You may not be logged into B站.")
+    else:
+        for c in s.cookies:
+            if c.name == "DedeUserID":
+                print(f"Cookies saved — user UID: {c.value}")
 
-    print(f"Cookies saved to {COOKIE_FILE}")
     return COOKIE_FILE
 
 

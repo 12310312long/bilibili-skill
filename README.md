@@ -14,24 +14,25 @@
 
 ## 前置条件
 
-- Python 3.8+，安装依赖：`pip install requests`
+- Python 3.8+，安装依赖：`pip install requests websocket-client`
 - 一个已登录 B站的 Chrome/Edge 浏览器（用于自动提取 Cookie）
 
 ## Cookie 登录
 
-**方式一：自动提取（推荐）**
+**自动提取（推荐）**
 
-`load_cookies_from_cdp()` 会自动启动 Edge 浏览器并提取 Cookie。需要本目录同级有 `web-access/scripts/cdp-proxy.mjs`（或自行配置 CDP 代理），否则请用方式二。
+`load_cookies_from_cdp()` 会自动启动 Edge 浏览器，通过 Chrome DevTools Protocol 直连提取 Cookie：
 
-**方式二：手动导出**
+```python
+from bilibili_api import load_cookies_from_cdp
+load_cookies_from_cdp()
+```
 
-1. 浏览器打开 [bilibili.com](https://www.bilibili.com) 并登录
-2. 按 F12 → 控制台执行：
-   ```js
-   document.cookie.split(';').map(c => c.trim()).join('\n')
-   ```
-3. 将输出保存为 `bilibili_cookies.txt`
-4. 加载：
+无需任何代理或中间服务——底层通过 WebSocket 直接调用 CDP 的 `Network.getCookies`。
+
+**手动方式**
+
+也可以手动从浏览器导出 Cookie 文件加载：
    ```python
    from bilibili_api import load_cookies_from_file
    load_cookies_from_file("bilibili_cookies.txt")
@@ -68,10 +69,8 @@ python bilibili_api.py user-videos <用户UID>
 ```python
 from bilibili_api import *
 
-# 加载 cookie
-load_cookies_from_file("bilibili_cookies.txt")
-# 或自动提取（需 CDP 代理）
-# load_cookies_from_cdp()
+# 自动从浏览器提取 Cookie（无需手动导出）
+load_cookies_from_cdp()
 
 # 视频信息
 info = video_info(bvid="<视频BVID>")
@@ -100,6 +99,7 @@ user_videos(uid="<用户UID>")
 ## 技术要点
 
 - **API 优先**：点赞/收藏/评论/私信均通过 REST API（Cookie + CSRF），比操作 DOM 快 10 倍
+- **Cookie 获取**：通过 Chrome DevTools Protocol（WebSocket）直连浏览器提取，无需中间代理
 - **下载用 CDP**：从 `window.__playinfo__` 提取 DASH 流 URL，支持充电视频
 - **CSRF token**：`bili_jct` cookie 的值即为 CSRF token
 - **Referer 头**：所有 API 请求需要 `Referer: https://www.bilibili.com/`
