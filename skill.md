@@ -32,38 +32,38 @@ load_cookies_from_file("/tmp/bilibili_cookies.txt")
 ### 视频信息
 
 ```bash
-python "bilibili_api.py" info BVxxxxxxxx
+python "bilibili_api.py" info <视频BVID>
 ```
 
 ### 点赞 + 收藏
 
 ```bash
 # 分别操作
-python "bilibili_api.py" like BVxxxxxxxx
-python "bilibili_api.py" fav BVxxxxxxxx
+python "bilibili_api.py" like <视频BVID>
+python "bilibili_api.py" fav <视频BVID>
 
 # 一键点赞+收藏
-python "bilibili_api.py" like-fav BVxxxxxxxx
+python "bilibili_api.py" like-fav <视频BVID>
 ```
 
 ### 评论
 
 ```bash
 # 查看评论
-python "bilibili_api.py" comments BVxxxxxxxx
+python "bilibili_api.py" comments <视频BVID>
 
 # 发评论（需在 Python 代码中调用）
 ```
 
 ```python
 from bilibili_api import post_comment
-post_comment(bvid="BVxxxxxxxx", message="评论内容")
+post_comment(bvid="<视频BVID>", message="评论内容")
 ```
 
 ### 视频下载
 
 ```bash
-python "bilibili_api.py" download BVxxxxxxxx
+python "bilibili_api.py" download <视频BVID>
 ```
 
 - 通过 CDP 从 `window.__playinfo__` 提取最高清流地址
@@ -79,17 +79,17 @@ python "bilibili_api.py" send-msg <对方UID> <消息内容>
 示例：
 
 ```bash
-python "bilibili_api.py" send-msg 12345678 你@你大坝
+python "bilibili_api.py" send-msg <对方UID> 你@你大坝
 ```
 
 ```python
 from bilibili_api import send_private_message
 
 # 发送私信（普通）
-send_private_message(receiver_id=12345678, message="你好")
+send_private_message(receiver_id=<对方UID>, message="你好")
 
 # from_firework=1 可对未聊过的新联系人发送（突破 1 条限制）
-send_private_message(receiver_id=12345678, message="你好", from_firework=1)
+send_private_message(receiver_id=<对方UID>, message="你好", from_firework=1)
 ```
 
 ### 用户信息
@@ -98,7 +98,7 @@ send_private_message(receiver_id=12345678, message="你好", from_firework=1)
 
 ```python
 import sys
-sys.path.insert(0, "C:/Users/Administrator/.claude/skills/bilibili")
+sys.path.insert(0, "path/to/bilibili-skill")
 from bilibili_api import *
 
 # 必须先加载 cookie
@@ -106,38 +106,38 @@ load_cookies_from_cdp()  # 从浏览器提取（推荐，最新鲜）
 # 或 load_cookies_from_file("/tmp/bilibili_cookies.txt")
 
 # 视频信息
-info = video_info(bvid="BVxxxxxxxx")
-# => {"aid": 123, "bvid": "BV...", "title": "...", "cid": ..., "duration": ...}
+info = video_info(bvid="<视频BVID>")
+# => {"aid": 123, "bvid": "<视频BVID>", "title": "...", "cid": ..., "duration": ...}
 
 # 点赞
-like_video(bvid="BVxxxxxxxx")
+like_video(bvid="<视频BVID>")
 
 # 收藏（默认收藏夹）
-favorite_video(bvid="BVxxxxxxxx")
+favorite_video(bvid="<视频BVID>")
 
 # 获取收藏夹列表
 folders = favorite_folders()
 
 # 一键点赞+收藏
-like_and_favorite_video("BVxxxxxxxx")
+like_and_favorite_video("<视频BVID>")
 
 # 评论
-comments = get_comments(bvid="BVxxxxxxxx")
-post_comment(bvid="BVxxxxxxxx", message="评论内容")
+comments = get_comments(bvid="<视频BVID>")
+post_comment(bvid="<视频BVID>", message="评论内容")
 
 # 回复评论
-post_comment(bvid="BVxxxxxxxx", message="回复内容", root=评论rpid, parent=父评论rpid)
+post_comment(bvid="<视频BVID>", message="回复内容", root=评论rpid, parent=父评论rpid)
 
 # 视频下载（支持充电视频）
-path = download_video("BVxxxxxxxx", output_dir="D:/videos")
+path = download_video("<视频BVID>", output_dir="D:/videos")
 
 # 用户信息
-user = user_info(uid="266765166")
-videos = user_videos(uid="266765166")
+user = user_info(uid="<用户UID>")
+videos = user_videos(uid="<用户UID>")
 
 # 私信
-send_private_message(receiver_id=12345678, message="你好")
-send_private_message(receiver_id=12345678, message="你好", from_firework=1)
+send_private_message(receiver_id=<对方UID>, message="你好")
+send_private_message(receiver_id=<对方UID>, message="你好", from_firework=1)
 
 # 导出 cookie 供 yt-dlp 使用
 export_cookies_for_ytdlp("/tmp/bilibili_cookies.txt")

@@ -25,23 +25,23 @@
 python bilibili_api.py load-cookies
 
 # 视频信息
-python bilibili_api.py info BV1xx411c7mD
+python bilibili_api.py info <视频BVID>
 
 # 下载视频
-python bilibili_api.py download BV1xx411c7mD
+python bilibili_api.py download <视频BVID>
 
 # 点赞 + 收藏
-python bilibili_api.py like-fav BV1xx411c7mD
+python bilibili_api.py like-fav <视频BVID>
 
 # 查看评论
-python bilibili_api.py comments BV1xx411c7mD
+python bilibili_api.py comments <视频BVID>
 
 # 发送私信
-python bilibili_api.py send-msg 12345678 "你好"
+python bilibili_api.py send-msg <对方UID> "你好"
 
 # 用户信息
-python bilibili_api.py user 266765166
-python bilibili_api.py user-videos 266765166
+python bilibili_api.py user <用户UID>
+python bilibili_api.py user-videos <用户UID>
 ```
 
 ## Python API
@@ -54,27 +54,27 @@ from bilibili_api import *
 load_cookies_from_cdp()
 
 # 视频信息
-info = video_info(bvid="BV1xx411c7mD")
+info = video_info(bvid="<视频BVID>")
 
 # 点赞
-like_video(bvid="BV1xx411c7mD")
+like_video(bvid="<视频BVID>")
 
 # 收藏
-favorite_video(bvid="BV1xx411c7mD")
+favorite_video(bvid="<视频BVID>")
 
 # 评论
-post_comment(bvid="BV1xx411c7mD", message="评论内容")
+post_comment(bvid="<视频BVID>", message="评论内容")
 
 # 私信
-send_private_message(receiver_id=12345678, message="你好")
-send_private_message(receiver_id=12345678, message="你好", from_firework=1)
+send_private_message(receiver_id=<对方UID>, message="你好")
+send_private_message(receiver_id=<对方UID>, message="你好", from_firework=1)
 
 # 下载
-download_video("BV1xx411c7mD", output_dir="D:/videos")
+download_video("<视频BVID>", output_dir="D:/videos")
 
 # 用户
-user_info(uid="266765166")
-user_videos(uid="266765166")
+user_info(uid="<用户UID>")
+user_videos(uid="<用户UID>")
 ```
 
 ## 技术要点
