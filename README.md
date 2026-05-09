@@ -1,6 +1,6 @@
 # B站 Skill — Bilibili API Tool
 
-用于 [Claude Code](https://claude.ai/code) 的 B站操作技能。通过 CDP 浏览器获取登录态，调用 B站 REST API 完成各项操作。
+用于操作 B站 的 Python 工具集。通过浏览器 CDP 或手动 Cookie 登录，调用 B站 REST API 完成各项操作。
 
 ## 功能
 
@@ -14,14 +14,33 @@
 
 ## 前置条件
 
-1. Chrome/Edge 已登录 [bilibili.com](https://www.bilibili.com)
-2. CDP 代理运行中（通过 `web-access` skill 启动）
-3. Python 依赖：`requests`
+- Python 3.8+，安装依赖：`pip install requests`
+- 一个已登录 B站的 Chrome/Edge 浏览器（用于自动提取 Cookie）
+
+## Cookie 登录
+
+**方式一：自动提取（推荐）**
+
+`load_cookies_from_cdp()` 会自动启动 Edge 浏览器并提取 Cookie。需要本目录同级有 `web-access/scripts/cdp-proxy.mjs`（或自行配置 CDP 代理），否则请用方式二。
+
+**方式二：手动导出**
+
+1. 浏览器打开 [bilibili.com](https://www.bilibili.com) 并登录
+2. 按 F12 → 控制台执行：
+   ```js
+   document.cookie.split(';').map(c => c.trim()).join('\n')
+   ```
+3. 将输出保存为 `bilibili_cookies.txt`
+4. 加载：
+   ```python
+   from bilibili_api import load_cookies_from_file
+   load_cookies_from_file("bilibili_cookies.txt")
+   ```
 
 ## 快速开始
 
 ```bash
-# 加载 cookie
+# 加载 cookie（自动模式）
 python bilibili_api.py load-cookies
 
 # 视频信息
@@ -47,11 +66,12 @@ python bilibili_api.py user-videos <用户UID>
 ## Python API
 
 ```python
-import sys
-sys.path.insert(0, "path/to/bilibili-skill")
 from bilibili_api import *
 
-load_cookies_from_cdp()
+# 加载 cookie
+load_cookies_from_file("bilibili_cookies.txt")
+# 或自动提取（需 CDP 代理）
+# load_cookies_from_cdp()
 
 # 视频信息
 info = video_info(bvid="<视频BVID>")
@@ -69,7 +89,7 @@ post_comment(bvid="<视频BVID>", message="评论内容")
 send_private_message(receiver_id=<对方UID>, message="<消息内容>")
 send_private_message(receiver_id=<对方UID>, message="<消息内容>", from_firework=1)
 
-# 下载
+# 下载（需要 CDP 代理）
 download_video("<视频BVID>", output_dir="D:/videos")
 
 # 用户
